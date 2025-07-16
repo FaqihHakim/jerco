@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Product } from '../types';
 
 // Helper function to convert file to base64
@@ -8,16 +8,12 @@ export const fileToBase64 = (file: File): Promise<string> => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => {
-            // result is "data:mime/type;base64,the_base64_string"
-            // We only need the base64 part
             const result = reader.result as string;
             resolve(result.split(',')[1]);
         };
         reader.onerror = error => reject(error);
     });
 };
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const responseSchema = {
     type: Type.OBJECT,
@@ -62,6 +58,12 @@ export const getStyleRecommendation = async (
     mimeType: string,
     allProducts: Product[]
 ): Promise<StyleRecommendation> => {
+    
+    // Lazy initialization of the AI client
+    if (!process.env.API_KEY) {
+        throw new Error("AI functionality is currently unavailable. The API key is not configured.");
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const productCatalog = JSON.stringify(
         allProducts.map(p => ({ 
@@ -98,6 +100,14 @@ Return your response ONLY as a JSON object that strictly adheres to the provided
     });
     
     const jsonText = response.text.trim();
-    // It should already be JSON because of the responseMimeType and schema
-    return JSON.parse(jsonText) as StyleRecommendation;
+    if (!jsonText) {
+        throw new Error("The AI model returned an empty response. Please try a different photo or check the model configuration.");
+    }
+    
+    try {
+        return JSON.parse(jsonText) as StyleRecommendation;
+    } catch(e) {
+        console.error("Failed to parse AI JSON response:", jsonText);
+        throw new Error("The AI returned a response in an unexpected format. Please try again.");
+    }
 };
